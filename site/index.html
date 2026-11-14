@@ -80,18 +80,18 @@ button{font:inherit;color:inherit;cursor:pointer;background:none;border:0;paddin
 #board{--ts:calc(min(44px,(min(100vw,520px) - 66px - (var(--n) - 1) * 5px) / var(--n)));display:flex;flex-direction:column;gap:10px;margin:16px 0 0}
 .row{position:relative;display:flex;gap:5px;padding-left:26px;min-height:var(--ts)}
 .row::after{content:"";position:absolute;left:0;top:15%;bottom:15%;width:4px;border-radius:2px}
-.row.target::after{background:var(--gold)}
+.row.target::after{background:var(--ink)}
 .ln{position:absolute;left:5px;top:-16px;stroke:var(--line);fill:none;stroke-width:2.2}
 .ln.on{stroke:var(--good)}
 .t{width:var(--ts);height:var(--ts);border:2px solid var(--line);border-radius:4px;background:var(--paper);display:grid;place-items:center;font-weight:800;font-size:calc(var(--ts) * .5);line-height:1}
 .given .t{background:var(--ink);border-color:var(--ink);color:var(--bg)}
 .win .t{background:var(--good);border-color:var(--good);color:#fff}
-.win.assist .t{background:var(--gold);border-color:var(--gold);color:#17191D}
+.t.hl{position:relative}.t.hl::after{content:"";position:absolute;top:3px;right:3px;width:7px;height:7px;border-radius:50%;background:var(--gold);box-shadow:0 0 0 1.5px var(--paper)}
 .lost .t{background:var(--bad);border-color:var(--bad);color:#fff}
 .out .t{background:var(--soft);border-color:var(--line);color:var(--muted)}
 .t.h{background:var(--key);border-color:var(--key)}
 .t.ty{border-color:var(--ink)}
-.t.cur{border-color:var(--gold)}
+.t.cur{border-color:var(--ink);box-shadow:inset 0 -3px 0 var(--ink)}
 .row.locked{opacity:.4}
 .row.active:not(.target){cursor:pointer}
 .row.active:not(.target) .t:not(.h){border-style:dashed}
@@ -183,7 +183,7 @@ dialog p b{color:var(--ink)}
 .recap li:first-child{border-top:0}
 .recap .ic{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:800;color:#fff}
 .recap .ok .ic{background:var(--good)}
-.recap .as .ic{background:var(--gold);color:#17191D}
+.recap .as .ic{background:var(--good)}.hdot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--gold);margin:0 4px 1px 0;vertical-align:middle}
 .recap .x .ic{background:var(--bad)}
 .recap .na .ic{background:none;border:1.5px dashed var(--line)}
 .recap .wd{display:flex;flex-direction:column;line-height:1.25}
@@ -245,11 +245,11 @@ dialog .xb:focus-visible{outline:none;background:var(--soft)}
     <li>Work down one word at a time. You get one guess per word. Miss, and you move on without seeing the answer.</li>
     <li><b>Miss two in a row and it’s game over.</b></li>
     <li>Typos, made-up words and other real compounds don’t cost you anything. Just try again.</li>
-    <li>You have 3 hints per puzzle. Each reveals one letter, but never a word’s last letter.</li>
+    <li>You have 3 hints per puzzle (the <span class="hdot"></span>dots on the Hint button). Each reveals one letter, marked with a gold dot, but never a word’s last letter.</li>
     <li>Each solved word scores a point for every letter still hidden.</li>
   </ol>
   <h3>Your share grid</h3>
-  <div class="key"><span>🟩</span><span>Solved with no hints</span><span>🟨</span><span>Solved with a hint (gold on the board)</span><span>🟥</span><span>Missed</span><span>⬛</span><span>Not reached (game over)</span></div>
+  <div class="key"><span>🟩</span><span>Solved with no hints</span><span>🟨</span><span>Solved with a hint (gold dot on a letter)</span><span>🟥</span><span>Missed</span><span>⬛</span><span>Not reached (game over)</span></div>
   <p style="margin-top:14px">A new chain every day at midnight. Same puzzle for everyone.</p>
 </dialog>
 
@@ -365,11 +365,12 @@ function paint(){
     const s=g.state[i];
     const cls=["row",s||(i===T?"target":"locked"),s==="win"&&g.miss[i]>0?"assist":"",anim&&anim.i===i?anim.c:""].join(" ");
     const link=i>0?LINK(g.state[i-1]&&s&&s!=="lost"&&g.state[i-1]!=="lost"):"";
+    const hs=g.rev[i]-(g.miss[i]||0);const hl=k=>k>=hs&&k<g.rev[i]?" hl":"";
     const tiles=[...word].map((ch,k)=>{
-      if(s==="lost"&&!g.done)return `<span class="t">${k<g.rev[i]?ch:""}</span>`;
+      if(s==="lost"&&!g.done)return `<span class="t${hl(k)}">${k<g.rev[i]?ch:""}</span>`;
       if(s==="out")return `<span class="t">${g.done?ch:""}</span>`;
-      if(s)return `<span class="t">${ch}</span>`;
-      if(k<g.rev[i])return `<span class="t h">${ch}</span>`;
+      if(s)return `<span class="t${s==="out"?"":hl(k)}">${ch}</span>`;
+      if(k<g.rev[i])return `<span class="t h${hl(k)}">${ch}</span>`;
       if(i===T){const j=k-g.rev[i];if(j<g.typed.length)return `<span class="t ty">${g.typed[j]}</span>`;if(j===g.typed.length)return `<span class="t cur"></span>`}
       return `<span class="t"></span>`}).join("");
     return `<div class="${cls}" aria-label="${s==="lost"&&!g.done?"Missed word":s==="out"?"Not reached, "+cap(word):s?cap(word):"Hidden word, "+word.length+" letters, starting "+word.slice(0,g.rev[i])}">${link}${tiles}</div>`;
@@ -418,7 +419,7 @@ function submit(){
   g.typed="";
   if(guess===w){
     const p=worth(i);g.state[i]="win";g.pts+=p;(g.wp=g.wp||{})[i]=p;anim={i,c:"flip"};
-    toast(p>=4?`Brilliant, +${p}`:p>=2?`Nice, +${p}`:`Got it, +${p}`);
+    toast((p>=4?`Brilliant, +${p}`:p>=2?`Nice, +${p}`:`Got it, +${p}`)+(g.miss[i]>0?" (with a hint)":""));
     paint();
   } else reveal(i,"miss");
   finishCheck();persist();
@@ -435,7 +436,7 @@ function reveal(i,why){
   } else {
     g.miss[i]++;g.rev[i]++;
     if(g.rev[i]>=g.words[i].length){g.state[i]="lost";toast(`The word was ${cap(g.words[i])}`)}
-    else toast("Letter revealed");
+    else toast(`Hint used. This word is now worth ${worth(i)}`);
   }
   paint();
 }
@@ -470,7 +471,7 @@ function openStats(resultOnly){
     const rows=g.words.slice(1).map((w,k)=>{
       const i=k+1,st=g.state[i];
       const [cls,ic,label]=st==="out"?["na","","Not reached"]:st==="lost"?["x","✕","Missed"]
-        :g.miss[i]>0?["as","✓",`Solved with ${g.miss[i]} ${g.miss[i]>1?"hints":"hint"}`]:["ok","✓","Solved"];
+        :g.miss[i]>0?["as","✓",`<i class="hdot"></i>Solved with ${g.miss[i]} ${g.miss[i]>1?"hints":"hint"}`]:["ok","✓","Solved"];
       const pts=st==="win"&&g.wp&&g.wp[i]!=null?`+${g.wp[i]}`:"";
       return `<li class="${cls}"><span class="ic" aria-hidden="true">${ic}</span><span class="wd"><b>${cap(w)}</b><small>${label}</small></span><span class="pp">${pts}</span></li>`;
     }).join("");
@@ -677,8 +678,8 @@ document.addEventListener("click",e=>{
 });
 
 /* help example */
-$("exBoard").innerHTML=[["FIRE","given",""],["WORK","win","firework"],["SHOP","win","workshop"],["LIFT","h","shop + ?"]].map(([w,c,l])=>
-  `<div class="r ${c==="h"?"":c}">${[...w].map((ch,k)=>`<span class="t ${c==="h"&&k===0?"h":""}" style="--ts:30px">${c==="h"&&k>0?"":ch}</span>`).join("")}<span class="lbl">${l}</span></div>`).join("");
+$("exBoard").innerHTML=[["FIRE","given",""],["WORK","win","firework"],["SHOP","win hint","workshop (H was a hint)"],["LIFT","h","shop + ?"]].map(([w,c,l])=>
+  `<div class="r ${c==="h"?"":c}">${[...w].map((ch,k)=>`<span class="t ${c==="h"&&k===0?"h":""}${c==="win hint"&&k===1?" hl":""}" style="--ts:30px">${c==="h"&&k>0?"":ch}</span>`).join("")}<span class="lbl">${l}</span></div>`).join("");
 
 function pauseClock(){if(g&&g.t0){g.ms=elapsed();g.t0=null;persist()}}
 function resumeClock(){if(g&&!g.done&&g.start&&!g.t0&&document.body.classList.contains("playing"))g.t0=Date.now()}
