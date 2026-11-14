@@ -105,7 +105,7 @@ button{font:inherit;color:inherit;cursor:pointer;background:none;border:0;paddin
 
 /* footer / keyboard */
 footer{position:relative;padding:18px 20px 0;display:none}
-#ghost{position:absolute;left:0;bottom:0;width:1px;height:1px;opacity:0;border:0;padding:0;font-size:16px;caret-color:transparent;background:transparent;color:transparent}
+#ghost{position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;border:0;padding:0;font-size:16px;caret-color:transparent;background:transparent;color:transparent}
 .gb{width:100%;padding:14px;border-radius:10px;font-size:16px}
 .gb:disabled{opacity:.35}
 .typehint{text-align:center;font-size:13px;color:var(--muted);margin:10px 0 0}
@@ -691,7 +691,17 @@ window.addEventListener("pagehide",pauseClock);
 setInterval(()=>{if(!document.hidden&&dayNum()!==N&&(!g.start||g.done))location.reload()},30000);
 /* native keyboard */
 const GH=$("ghost");
-function focusInput(){if(g&&!g.done&&document.body.classList.contains("playing")){GH.value=g.typed;GH.focus({preventScroll:false})}}
+function focusInput(){if(g&&!g.done&&document.body.classList.contains("playing")){GH.value=g.typed;GH.focus({preventScroll:true});keepRowVisible();setTimeout(keepRowVisible,350)}}
+/* keep the row being typed visible above the phone keyboard */
+function keepRowVisible(){
+  if(!document.body.classList.contains("playing"))return;
+  const r=document.querySelector(".row.target")||document.getElementById("board");if(!r)return;
+  const vv=window.visualViewport,top=vv?vv.offsetTop:0,h=vv?vv.height:innerHeight;
+  const b=r.getBoundingClientRect(),pad=Math.min(90,h*.18);
+  if(b.top<top+pad||b.bottom>top+h-pad)window.scrollBy({top:b.top-top-pad,behavior:REDUCE?"auto":"smooth"});
+}
+if(window.visualViewport)visualViewport.addEventListener("resize",()=>{if(document.body.classList.contains("typing"))keepRowVisible()});
+{const _paint=paint;paint=function(){const o=_paint.apply(this,arguments);if(document.body.classList.contains("typing"))requestAnimationFrame(keepRowVisible);return o}}
 GH.addEventListener("input",()=>{
   if(!g||g.done){GH.value="";return}
   const i=target();if(i<0)return;
