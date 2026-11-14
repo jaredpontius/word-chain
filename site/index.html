@@ -86,6 +86,7 @@ button{font:inherit;color:inherit;cursor:pointer;background:none;border:0;paddin
 .t{width:var(--ts);height:var(--ts);border:2px solid var(--line);border-radius:4px;background:var(--paper);display:grid;place-items:center;font-weight:800;font-size:calc(var(--ts) * .5);line-height:1}
 .given .t{background:var(--ink);border-color:var(--ink);color:var(--bg)}
 .win .t{background:var(--good);border-color:var(--good);color:#fff}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;margin:14px 0 0;padding-left:26px;font-size:13px;color:var(--muted)}.legend:empty{display:none}.legend span{display:inline-flex;align-items:center;gap:6px}.legend i{display:inline-block;width:12px;height:12px;border-radius:3px}.legend .lg-win{background:var(--good)}.legend .lg-lost{background:var(--bad)}.legend .lg-out{background:var(--soft);border:1.5px solid var(--line)}.legend .lg-hint{width:7px;height:7px;border-radius:50%;background:var(--gold)}
 .t.hl{position:relative}.t.hl::after{content:"";position:absolute;top:3px;right:3px;width:7px;height:7px;border-radius:50%;background:var(--gold);box-shadow:0 0 0 1.5px var(--paper)}
 .lost .t{background:var(--bad);border-color:var(--bad);color:#fff}
 .out .t{background:var(--soft);border-color:var(--line);color:var(--muted)}
@@ -375,6 +376,13 @@ function paint(){
       return `<span class="t"></span>`}).join("");
     return `<div class="${cls}" aria-label="${s==="lost"&&!g.done?"Missed word":s==="out"?"Not reached, "+cap(word):s?cap(word):"Hidden word, "+word.length+" letters, starting "+word.slice(0,g.rev[i])}">${link}${tiles}</div>`;
   }).join("");
+  {let lg=$("legend");if(!lg){lg=document.createElement("div");lg.id="legend";lg.className="legend";b.after(lg)}
+   const st=g.state.slice(1),parts=[];
+   if(st.includes("win"))parts.push('<span><i class="lg-win"></i>Solved</span>');
+   if(b.querySelector(".t.hl"))parts.push('<span><i class="lg-hint"></i>Letter from a hint</span>');
+   if(st.includes("lost"))parts.push('<span><i class="lg-lost"></i>Missed</span>');
+   if(st.includes("out"))parts.push('<span><i class="lg-out"></i>Not reached</span>');
+   lg.innerHTML=parts.length?parts.join("")+'<span>Tap a word for details</span>':"";}
   anim=null;
   if(GH_READY&&GH.value!==g.typed)GH.value=g.typed;
   $("guessBtn").disabled=g.done||T<0;
@@ -715,7 +723,14 @@ GH.addEventListener("input",()=>{
 GH.addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();press("ENTER")}});
 GH.addEventListener("focus",()=>document.body.classList.add("typing"));
 GH.addEventListener("blur",()=>document.body.classList.remove("typing"));
-$("app").addEventListener("click",e=>{if(e.target.closest("#board"))focusInput()});
+$("app").addEventListener("click",e=>{
+  const row=e.target.closest("#board .row");
+  if(row&&g){const i=[...row.parentNode.children].indexOf(row),s=g.state[i],w=cap(g.words[i]),h=g.miss[i]||0,
+    p=g.wp&&g.wp[i]!=null?g.wp[i]:null,hs=h?` with ${h} ${h>1?"hints":"hint"}`:"";
+    const msg=i===0?`${w} is the starting word`:s==="win"?`${w}: solved${hs}${p!=null?`, +${p}`:""}`
+      :s==="lost"?(g.done?`${w}: missed`:"Missed. The answer stays hidden until the game ends"):s==="out"?`${w}: not reached`:null;
+    if(msg){toast(msg);if(i===0||s)return}}
+  if(e.target.closest("#board"))focusInput()});
 ["hint","guessBtn"].forEach(id=>$(id).addEventListener("mousedown",e=>e.preventDefault()));
 $("guessBtn").addEventListener("click",()=>{press("ENTER");if(!g.done)focusInput()});
 
