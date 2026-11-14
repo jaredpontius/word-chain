@@ -215,7 +215,8 @@ dialog .xb:focus-visible{outline:none;background:var(--soft)}
 .dist .dr.today span,.dist .dr.today b{color:var(--ink);font-weight:700}
 .dist .dr.today .track i{background:var(--good)!important}
 .dist .dr.today.over .track i{background:var(--bad)!important}
-.avg{font-size:13px;margin:14px 0 0!important}
+.avg{font-size:13px;margin:-8px 0 0!important}.avg:empty{display:none}.mystats .avg+h3{margin-top:20px}
+.hist{list-style:none;margin:0;padding:0;border:1px solid var(--line);border-radius:12px;overflow:hidden}.hist li{display:grid;grid-template-columns:1fr auto;gap:2px 12px;align-items:center;padding:10px 14px;border-top:1px solid var(--line);font-size:15px}.hist li:first-child{border-top:0}.hist .d{font-weight:700}.hist .d small{font-weight:400;color:var(--muted);margin-left:6px;font-size:12px}.hist .r{font-size:13px;color:var(--muted);grid-column:1}.hist .p{grid-row:1 / span 2;grid-column:2;font-weight:800;font-variant-numeric:tabular-nums;text-align:right;line-height:1.1}.hist .p small{display:block;font-size:12px;font-weight:400;color:var(--muted)}.hist .ov .r{color:var(--bad)}.hist .empty{display:block;color:var(--muted);text-align:center}
 .avg b{color:var(--ink)}
 </style>
 </head>
@@ -274,9 +275,9 @@ dialog .xb:focus-visible{outline:none;background:var(--soft)}
   <section class="mystats">
     <h3>Your stats</h3>
     <div class="stats" id="statsBody"></div>
-    <h3>How your chains end</h3>
-    <div class="dist" id="dist"></div>
     <p class="avg" id="avgLine"></p>
+    <h3>Your recent games</h3>
+    <ul class="hist" id="dist"></ul>
   </section>
   <textarea id="fallback" readonly aria-label="Result to copy"></textarea>
 </dialog>
@@ -494,12 +495,15 @@ function openStats(resultOnly){
   } else {
     $("statsTop").innerHTML=`<p class="eyebrow">Word Chain</p><h2>Statistics</h2><p class="sub">Finish today’s chain to see your result and share it.</p>`;
   }
-  const pct=ST.played?Math.round((ST.wins||0)/ST.played*100):0;
-  $("statsBody").innerHTML=`<div><b>${ST.played}</b><span>Played</span></div><div><b>${pct}<small>%</small></b><span>Completed</span></div><div><b>${curStreak()}</b><span>Win streak</span></div><div><b>${ST.best}</b><span>Best streak</span></div>`;
-  const rowsD=[...ST.dist,ST.overs||0],mx=Math.max(1,...rowsD),td=ST.days[N],todayK=!td||!g.done?-1:td.over?4:Math.min(3,td.lost);
-  $("dist").innerHTML=["No misses","1 miss","2 misses","3+ misses","Game over"].map((l,k)=>
-    `<div class="dr ${k===todayK?"today":""} ${k===4?"over":""}"><span>${l}</span><div class="track"><i style="width:${rowsD[k]?Math.max(4,rowsD[k]/mx*100):0}%"></i></div><b>${rowsD[k]}</b></div>`).join("");
-  $("avgLine").innerHTML=ST.played?`Average score <b>${Math.round(ST.total/ST.played)}</b> points`:"";
+  const days=Object.entries(ST.days||{}).map(([d,v])=>({d:+d,...v})).sort((a,b)=>b.d-a.d);
+  const bestPts=days.reduce((m,x)=>Math.max(m,x.pts||0),0),avg=ST.played?Math.round(ST.total/ST.played):0,cs=curStreak();
+  $("statsBody").innerHTML=`<div><b>${ST.played}</b><span>Games played</span></div><div><b>${avg}</b><span>Average score</span></div><div><b>${bestPts}</b><span>Best score</span></div><div><b>${cs}</b><span>Day streak</span></div>`;
+  $("avgLine").innerHTML=ST.played?`Your streak counts days in a row you finished without a game over.${ST.best>cs?` Longest: <b>${ST.best}</b> ${ST.best===1?"day":"days"}.`:""}`:"";
+  const dayLabel=d=>{const ago=N-d;if(ago===0)return"Today";if(ago===1)return"Yesterday";const t=new Date();t.setDate(t.getDate()-ago);return t.toLocaleDateString(undefined,{weekday:"short",month:"short",day:"numeric"})};
+  $("dist").innerHTML=days.length?days.slice(0,7).map(x=>{
+    const res=x.over?"Game over":x.lost?`${x.lost} ${x.lost>1?"misses":"miss"}`:"No misses";
+    return `<li class="${x.over?"ov":""}"><span class="d">${dayLabel(x.d)}<small>No. ${x.d}</small></span><span class="r">${res}</span><span class="p">${x.pts||0}<small>points</small></span></li>`}).join("")
+    :`<li class="empty">Finish a chain and it will show up here.</li>`;
   if(!D.open)D.showModal();
   D.scrollTop=0;
 }
