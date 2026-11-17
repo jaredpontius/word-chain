@@ -30,7 +30,7 @@
 *,*::before,*::after{box-sizing:inherit}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 body{margin:0;background:var(--bg);color:var(--ink);font:400 16px/1.5 Archivo,"Helvetica Neue",Arial,sans-serif;-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent}
-body.playing{padding-bottom:40px}
+body.playing{padding-bottom:0}
 button{font:inherit;color:inherit;cursor:pointer;background:none;border:0;padding:0}
 :focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 .wrap{max-width:520px;margin:0 auto;padding:0 20px}
@@ -79,7 +79,7 @@ button{font:inherit;color:inherit;cursor:pointer;background:none;border:0;paddin
 .strip .m b{display:block;font-size:20px;color:var(--ink)}
 
 /* board */
-#board{--ts:calc(min(44px,(min(100vw,520px) - 66px - (var(--n) - 1) * 5px) / var(--n)));display:flex;flex-direction:column;gap:10px;margin:16px 0 0}
+#board{--ts:calc(min(var(--tsh,44px),44px,(min(100vw,520px) - 66px - (var(--n) - 1) * 5px) / var(--n)));display:flex;flex-direction:column;gap:10px;margin:16px 0 0}
 .row{position:relative;display:flex;gap:5px;padding-left:26px;min-height:var(--ts)}
 .row::after{content:"";position:absolute;left:0;top:15%;bottom:15%;width:4px;border-radius:2px}
 .row.target::after{background:var(--ink)}
@@ -113,7 +113,7 @@ footer{position:relative;padding:18px 20px 0;display:none}
 .gb:disabled{opacity:.35}
 .typehint{text-align:center;font-size:13px;color:var(--muted);margin:10px 0 0}
 body.typing .typehint{visibility:hidden}
-body.typing .row.target .t.cur{animation:blink 1s steps(2,start) infinite}
+body.playing .row.target .t.cur{animation:blink 1s steps(2,start) infinite}
 @keyframes blink{50%{border-color:var(--line)}}
 #board{cursor:text}
 body.playing footer{display:block}
@@ -220,6 +220,25 @@ dialog .xb:focus-visible{outline:none;background:var(--soft)}
 .avg{font-size:13px;margin:-8px 0 0!important}.avg:empty{display:none}.mystats .avg+h3{margin-top:20px}
 .hist{list-style:none;margin:0;padding:0;border:1px solid var(--line);border-radius:12px;overflow:hidden}.hist li{display:grid;grid-template-columns:1fr auto;gap:2px 12px;align-items:center;padding:10px 14px;border-top:1px solid var(--line);font-size:15px}.hist li:first-child{border-top:0}.hist .d{font-weight:700}.hist .d small{font-weight:400;color:var(--muted);margin-left:6px;font-size:12px}.hist .r{font-size:13px;color:var(--muted);grid-column:1}.hist .p{grid-row:1 / span 2;grid-column:2;font-weight:800;font-variant-numeric:tabular-nums;text-align:right;line-height:1.1}.hist .p small{display:block;font-size:12px;font-weight:400;color:var(--muted)}.hist .ov .r{color:var(--bad)}.hist .empty{display:block;color:var(--muted);text-align:center}
 .avg b{color:var(--ink)}
+
+/* ---------- one-screen layout + on-screen keyboard ---------- */
+html:has(body.playing){overscroll-behavior:none}
+body.playing{display:flex;flex-direction:column;height:calc(100vh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px));height:calc(100dvh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px));overflow:hidden}
+body.playing #app{flex:1 1 auto;min-height:0;overflow-y:auto;overscroll-behavior:contain}
+body.playing footer{flex:none;padding:8px 8px 8px}
+body.playing .acts{padding:0 8px 10px}
+#board{margin-top:12px}
+.kb{display:flex;flex-direction:column;gap:7px;max-width:500px;margin:0 auto;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:manipulation}
+.kb[hidden]{display:none}
+.kr{display:flex;gap:5px;justify-content:center}
+.kr.mid{padding:0 5%}
+.kb .k{flex:1 1 0;min-width:0;height:clamp(42px,6.6dvh,58px);border-radius:7px;background:var(--key);color:var(--ink);font-weight:700;font-size:clamp(16px,2.4dvh,20px);display:grid;place-items:center;padding:0;line-height:1;transition:transform .06s,background-color .06s}
+.kb .k.wide{flex:1.55 1 0;font-size:13px;letter-spacing:.02em}
+.kb .k.ent{background:var(--ink);color:var(--bg)}
+.kb .k.down{transform:scale(.93);background:var(--line)}
+.kb .k.ent.down{background:var(--muted)}
+.kb .k:focus-visible{outline:2px solid var(--gold);outline-offset:1px}
+@media (prefers-reduced-motion:reduce){.kb .k{transition:none}.kb .k.down{transform:none}}
 </style>
 </head>
 <body>
@@ -231,9 +250,7 @@ dialog .xb:focus-visible{outline:none;background:var(--soft)}
       <div class="tip" id="tip"></div>
       <button class="hb" id="hint" aria-label="Use a hint"><span>Hint</span><span class="pips" id="pips"></span></button>
     </div>
-    <button class="pb gb" id="guessBtn" type="button">Guess</button>
-    <p class="typehint" id="typehint">Tap the board to bring up the keyboard.</p>
-    <input id="ghost" type="text" inputmode="text" autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go" aria-label="Type your guess">
+    <div class="kb" id="kb" role="group" aria-label="Keyboard"></div>
   </div>
 </footer>
 
@@ -320,7 +337,8 @@ function fresh(){
 }
 function init(){
   const sig=puzzleFor(N).join(" ");
-  g=(ST.cur&&ST.cur.n===N&&ST.cur.v===4&&ST.cur.sig===sig)?ST.cur:fresh();
+  const L=puzzleFor(N).length,c=ST.cur,ok=k=>c&&Array.isArray(c[k])&&c[k].length===L;
+  g=(c&&c.n===N&&c.v===4&&c.sig===sig&&ok("state")&&ok("rev")&&ok("miss"))?c:fresh();
   ST.cur=g; g.words=puzzleFor(N); g.typed=""; g.t0=null; g.ms=g.ms||0;
 }
 const lo=()=>g.state.findIndex(s=>!s);
@@ -391,7 +409,7 @@ function paint(){
    lg.innerHTML=parts.length?parts.join("")+'<span>Tap a word for details</span>':"";}
   anim=null;
   if(GH_READY&&GH.value!==g.typed)GH.value=g.typed;
-  $("guessBtn").disabled=g.done||T<0;
+  $("kb").hidden=g.done||T<0;
   const left=HINTS-g.hints;
   $("pips").innerHTML=Array.from({length:HINTS},(_,k)=>`<i class="${k<left?"":"u"}"></i>`).join("");
   $("hint").disabled=g.done||left<=0||T<0||g.words[T].length-g.rev[T]<=1;
@@ -536,6 +554,7 @@ async function share(){
 document.addEventListener("keydown",e=>{
   if(e.metaKey||e.ctrlKey||e.altKey||document.querySelector("dialog[open]"))return;
   if(document.activeElement&&/^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName))return;
+  if((e.key==="Enter"||e.key===" ")&&document.activeElement&&document.activeElement.closest&&document.activeElement.closest("#kb"))return;
   if(e.key==="Enter"){e.preventDefault();press("ENTER")}
   else if(e.key==="Backspace")press("BACK");
   else if(/^[a-z]$/i.test(e.key))press(e.key.toUpperCase());
@@ -723,31 +742,45 @@ document.addEventListener("visibilitychange",()=>{
 });
 window.addEventListener("pagehide",pauseClock);
 setInterval(()=>{if(!document.hidden&&dayNum()!==N&&(!g.start||g.done))location.reload()},30000);
-/* native keyboard */
-const GH=$("ghost");
-function focusInput(){if(g&&!g.done&&document.body.classList.contains("playing")){GH.value=g.typed;GH.focus({preventScroll:true});keepRowVisible();setTimeout(keepRowVisible,350)}}
-/* keep the row being typed visible above the phone keyboard */
-function keepRowVisible(){
-  if(!document.body.classList.contains("playing"))return;
-  const r=document.querySelector(".row.target")||document.getElementById("board");if(!r)return;
-  const vv=window.visualViewport,top=vv?vv.offsetTop:0,h=vv?vv.height:innerHeight;
-  const b=r.getBoundingClientRect(),pad=Math.min(90,h*.18);
-  if(b.top<top+pad||b.bottom>top+h-pad)window.scrollBy({top:b.top-top-pad,behavior:REDUCE?"auto":"smooth"});
+/* ---------- on-screen keyboard (the phone keyboard is never used) ---------- */
+const GH={value:"",focus(){},blur(){}};
+function focusInput(){}
+{
+  const KB=$("kb");
+  const BACK_SVG='<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 5H9l-6 7 6 7h12z"/><path d="M17 9.5l-5 5M12 9.5l5 5"/></svg>';
+  KB.innerHTML=["QWERTYUIOP","ASDFGHJKL","+ZXCVBNM-"].map((r,ri)=>`<div class="kr${ri===1?" mid":""}">${[...r].map(c=>
+    c==="+"?`<button type="button" class="k wide ent" data-k="ENTER">Guess</button>`
+    :c==="-"?`<button type="button" class="k wide" data-k="BACK" aria-label="Delete letter">${BACK_SVG}</button>`
+    :`<button type="button" class="k" data-k="${c}">${c}</button>`).join("")}</div>`).join("");
+  let rep=null;
+  const release=()=>{clearTimeout(rep);rep=null;KB.querySelectorAll(".k.down").forEach(x=>x.classList.remove("down"))};
+  KB.addEventListener("pointerdown",e=>{
+    const k=e.target.closest(".k");if(!k)return;
+    e.preventDefault();release();k.classList.add("down");
+    press(k.dataset.k);
+    if(k.dataset.k==="BACK")rep=setTimeout(function again(){press("BACK");rep=setTimeout(again,75)},450);
+  });
+  ["pointerup","pointercancel"].forEach(ev=>document.addEventListener(ev,release));
+  KB.addEventListener("pointerleave",release);
+  KB.addEventListener("contextmenu",e=>e.preventDefault());
+  /* keyboard/assistive activation of a focused key (no pointer) */
+  KB.addEventListener("click",e=>{if(e.detail!==0)return;const k=e.target.closest(".k");if(k)press(k.dataset.k)});
 }
-if(window.visualViewport)visualViewport.addEventListener("resize",()=>{if(document.body.classList.contains("typing"))keepRowVisible()});
-{const _paint=paint;paint=function(){const o=_paint.apply(this,arguments);if(document.body.classList.contains("typing"))requestAnimationFrame(keepRowVisible);return o}}
-GH.addEventListener("input",()=>{
-  if(!g||g.done){GH.value="";return}
-  const i=target();if(i<0)return;
-  const room=g.words[i].length-g.rev[i];
-  const v=GH.value.toUpperCase().replace(/[^A-Z]/g,"").slice(0,room);
-  const added=v.length>g.typed.length;g.typed=v;
-  if(GH.value!==v)GH.value=v;
-  updateTyped(i,added);
-});
-GH.addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();press("ENTER")}});
-GH.addEventListener("focus",()=>document.body.classList.add("typing"));
-GH.addEventListener("blur",()=>document.body.classList.remove("typing"));
+/* shrink tiles so the whole chain fits above the keyboard with no scrolling */
+function fitBoard(){
+  const b=$("board"),app=$("app");
+  if(!b||!g||!document.body.classList.contains("playing"))return;
+  const rows=g.words.length,lg=$("legend"),lgH=lg&&lg.innerHTML?lg.offsetHeight+14:0;
+  const top=b.getBoundingClientRect().top-app.getBoundingClientRect().top+app.scrollTop;
+  const avail=app.clientHeight-top-lgH-10;
+  let gap=10,ts=Math.floor((avail-(rows-1)*gap)/rows);
+  if(ts<40){gap=6;ts=Math.floor((avail-(rows-1)*gap)/rows)}
+  b.style.setProperty("--tsh",Math.max(24,Math.min(44,ts))+"px");
+  b.style.gap=gap+"px";
+}
+{const _paint=paint;paint=function(){const o=_paint.apply(this,arguments);fitBoard();return o}}
+addEventListener("resize",fitBoard);
+if(window.visualViewport)visualViewport.addEventListener("resize",fitBoard);
 $("app").addEventListener("click",e=>{
   const row=e.target.closest("#board .row");
   if(row&&g){const i=[...row.parentNode.children].indexOf(row),s=g.state[i],w=cap(g.words[i]),h=g.miss[i]||0,
@@ -756,8 +789,7 @@ $("app").addEventListener("click",e=>{
       :s==="lost"?(g.done?`${w}: missed`:"Missed. The answer stays hidden until the game ends"):s==="out"?`${w}: not reached`:null;
     if(msg){toast(msg);if(i===0||s)return}}
   if(e.target.closest("#board"))focusInput()});
-["hint","guessBtn"].forEach(id=>$(id).addEventListener("mousedown",e=>e.preventDefault()));
-$("guessBtn").addEventListener("click",()=>{press("ENTER");if(!g.done)focusInput()});
+$("hint").addEventListener("mousedown",e=>e.preventDefault());
 
 /* secret: long-press the Word Chain title to start today over */
 (()=>{
