@@ -43,6 +43,8 @@ button{font:inherit;color:inherit;cursor:pointer;background:none;border:0;paddin
 .splash .row2{display:flex;flex-direction:column;gap:10px;width:min(280px,100%)}
 .pb{padding:14px 20px;border-radius:999px;font-weight:700;font-size:16px;background:var(--ink);color:var(--bg)}
 .pb.g{background:var(--bg);color:var(--ink);border:2px solid var(--ink)}
+.splash .hello{margin:22px 0 0;font-weight:700;font-size:15px}
+.splash .hello+.meta{margin-top:10px}
 .splash .meta{margin-top:30px;font-size:14px;color:var(--muted);line-height:1.6}
 .splash .meta b{display:block;color:var(--ink);font-size:15px}
 
@@ -340,8 +342,11 @@ function splash(){
       ${done?`<button class="pb" data-act="play">View today’s puzzle</button><button class="pb g" data-act="stats">See stats</button><button class="pb g" data-act="lb">Leaderboard</button>`
             :`<button class="pb" data-act="play">${started?"Continue":"Play"}</button><button class="pb g" data-act="help">How to play</button><button class="pb g" data-act="lb">Leaderboard</button>`}
     </div>
+    <p class="hello" id="hello" hidden></p>
     <div class="meta"><b>${dateStr}</b>No. ${N}</div></section>`;
+  welcome();
 }
+function welcome(){const h=$("hello"),n=lsGet("wc-name");if(!h)return;h.hidden=!n;h.textContent=n?`Welcome back, ${n}`:""}
 function game(){
   document.body.classList.add("playing");
   if(!g.done){if(!g.start)g.start=Date.now();if(!g.t0)g.t0=Date.now();persist()}
@@ -547,7 +552,7 @@ const CONFIG={supabaseUrl:"https://qophrjzzwexqtfrtlhmd.supabase.co",supabaseKey
 
 const topLevel=()=>{try{return window.top===window}catch(e){return false}};
 const shareUrl=()=>topLevel()&&/^https?:/.test(location.protocol)?location.origin+location.pathname:"";
-const LB={kind:null,ready:false,canPost:false,needsName:false,today:[],all:[],me:null,err:null,posting:false};
+const LB={kind:null,ready:false,canPost:false,needsName:false,today:[],all:[],me:null,mh:null,err:null,posting:false};
 let lbTab="today";
 const cmpToday=(a,b)=>b.pts-a.pts||a.ms-b.ms;
 const lsGet=k=>{try{return localStorage.getItem(k)||""}catch(e){return ""}};
@@ -563,29 +568,43 @@ function myResult(){
 }
 function alreadyPosted(){
   if(LB.kind==="cl")return !!(LB.mine&&LB.mine.days&&LB.mine.days[N]);
-  return lsGet("wc-posted")===String(N)||LB.today.some(r=>r.id===LB.me);
+  return lsGet("wc-posted")===String(N)||LB.today.some(r=>r.id===LB.mh);
 }
 
 /* Supabase backend (self-hosted copy) */
 const SB={
   h(){return {apikey:CONFIG.supabaseKey,Authorization:"Bearer "+CONFIG.supabaseKey,"Content-Type":"application/json"}},
+  base(){return CONFIG.supabaseUrl.replace(/\/$/,"")},
+  async rpc(fn,args){
+    const res=await fetch(`${SB.base()}/rest/v1/rpc/${fn}`,{method:"POST",headers:SB.h(),body:JSON.stringify(args||{})});
+    let body=null;try{body=await res.json()}catch(e){}
+    if(!res.ok){const err=new Error((body&&body.message)||("rpc "+res.status));err.status=res.status;throw err}
+    return body;
+  },
+  async hash(id){
+    const d=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(id));
+    return [...new Uint8Array(d)].map(b=>b.toString(16).padStart(2,"0")).join("").slice(0,16);
+  },
   async load(){
-    const base=CONFIG.supabaseUrl.replace(/\/$/,"");
-    const [t,a]=await Promise.all([
-      fetch(`${base}/rest/v1/scores?day=eq.${N}&select=player_id,name,pts,ms&order=pts.desc,ms.asc&limit=100`,{headers:SB.h()}),
-      fetch(`${base}/rest/v1/alltime?select=player_id,name,total,played&order=total.desc,played.desc&limit=100`,{headers:SB.h()})]);
-    if(!t.ok||!a.ok)throw new Error("load");
-    LB.today=(await t.json()).map(r=>({id:r.player_id,name:r.name,pts:r.pts,ms:r.ms}));
-    LB.all=(await a.json()).map(r=>({id:r.player_id,name:r.name,total:r.total,played:r.played}));
+    const [t,a]=await Promise.all([SB.rpc("leaderboard_today",{p_day:N}),SB.rpc("leaderboard_alltime")]);
+    const clean=v=>String(v==null?"":v).slice(0,16);
+    LB.today=(t||[]).map(r=>({id:r.pid,name:clean(r.name),pts:r.pts|0,ms:r.ms|0}));
+    LB.all=(a||[]).map(r=>({id:r.pid,name:clean(r.name),total:r.total|0,played:r.played|0}));
     LB.ready=true;LB.err=null;
   },
   async post(r){
-    const base=CONFIG.supabaseUrl.replace(/\/$/,"");
-    const res=await fetch(`${base}/rest/v1/scores`,{method:"POST",headers:{...SB.h(),Prefer:"return=minimal"},
-      body:JSON.stringify({day:N,player_id:LB.me,name:lsGet("wc-name"),pts:r.pts,ms:r.ms,lost:r.lost,hints:r.hints})});
-    if(!res.ok&&res.status!==409)throw new Error("post "+res.status);
+    try{
+      await SB.rpc("submit_score",{p_player_id:LB.me,p_day:N,p_name:lsGet("wc-name"),p_pts:r.pts,p_ms:r.ms,p_lost:r.lost,p_hints:r.hints});
+    }catch(e){
+      if(/invalid name/.test(e.message)){lsSet("wc-name","");LB.nameErr=true;return}
+      throw e;
+    }
     lsSet("wc-posted",String(N));
     await SB.load();
+  },
+  async recall(){
+    if(lsGet("wc-name"))return;
+    try{const n=await SB.rpc("player_name",{p_player_id:LB.me});if(typeof n==="string"&&n){lsSet("wc-name",n.slice(0,16));welcome()}}catch(e){}
   }
 };
 
@@ -604,6 +623,8 @@ const CL={db:null,user:null,
 async function lbInit(){
   if(CONFIG.supabaseUrl&&CONFIG.supabaseKey){
     LB.kind="sb";LB.me=playerId();LB.canPost=true;LB.needsName=true;
+    try{LB.mh=await SB.hash(LB.me)}catch(e){LB.mh=null}
+    SB.recall();
     try{await SB.load()}catch(e){LB.err="The leaderboard can’t be reached right now."}
     lbChanged();maybePost();return;
   }
@@ -612,7 +633,7 @@ async function lbInit(){
   try{[db,user]=await Promise.all([window.claude.use("db"),window.claude.use("user")])}catch(e){}
   if(!db){LB.kind=null;LB.err="Sign in to Claude to see the leaderboard.";lbChanged();return}
   LB.kind="cl";CL.db=db;CL.user=user;
-  LB.me=user?await user.id():null;
+  LB.me=user?await user.id():null;LB.mh=LB.me;
   const cw=user?await user.can("data.write"):null;
   LB.canPost=!!LB.me&&cw!==false;
   const timer=setTimeout(()=>{if(!LB.ready){LB.err="The leaderboard can’t be reached right now.";lbChanged()}},10000);
@@ -639,7 +660,7 @@ async function maybePost(){
 }
 
 function rankText(){
-  const i=LB.today.findIndex(r=>r.id===LB.me);
+  const i=LB.today.findIndex(r=>r.id===LB.mh);
   return i>=0?`You’re #${i+1} of ${LB.today.length} on today’s leaderboard.`:"";
 }
 function lbChanged(){
@@ -659,8 +680,8 @@ function renderLB(){
   const rows=lbTab==="today"?LB.today:LB.all;
   if(!rows.length)body.innerHTML=`<p class="empty">${lbTab==="today"?"No scores yet today. Be the first.":"No scores yet."}</p>`;
   else{
-    body.innerHTML=`<ol class="lb">${rows.slice(0,100).map((r,k)=>`<li class="${r.id===LB.me?"me":""}"><span class="rk">${k+1}</span><span class="nm"></span><span class="sc">${lbTab==="today"?`${r.pts} pts<small>${fmt(r.ms)}</small>`:`${r.total} pts<small>${r.played} played</small>`}</span></li>`).join("")}</ol>`;
-    body.querySelectorAll(".nm").forEach((el,k)=>el.textContent=(rows[k].name||"Player")+(rows[k].id===LB.me?" (you)":""));
+    body.innerHTML=`<ol class="lb">${rows.slice(0,100).map((r,k)=>`<li class="${r.id===LB.mh?"me":""}"><span class="rk">${k+1}</span><span class="nm"></span><span class="sc">${lbTab==="today"?`${r.pts} pts<small>${fmt(r.ms)}</small>`:`${r.total} pts<small>${r.played} played</small>`}</span></li>`).join("")}</ol>`;
+    body.querySelectorAll(".nm").forEach((el,k)=>el.textContent=(rows[k].name||"Player")+(rows[k].id===LB.mh?" (you)":""));
   }
   const r=myResult();
   if(!r)note.textContent="Finish today’s chain to post your score. Ranked by points, then fastest time.";
@@ -670,8 +691,8 @@ function renderLB(){
   }
   else if(!LB.canPost)note.textContent="You can see this board, but only players the owner has invited can post scores.";
   else if(LB.needsName&&!lsGet("wc-name")){
-    note.innerHTML=`Pick a name to post your score.<form id="nameForm"><input id="nameIn" maxlength="16" placeholder="Your name" autocomplete="nickname" aria-label="Your name"><button class="pb" type="submit">Post</button></form>`;
-    $("nameForm").onsubmit=e=>{e.preventDefault();const v=$("nameIn").value.replace(/[^\p{L}\p{N} _.\-]/gu,"").trim().slice(0,16);if(!v){toast("Enter a name");return}lsSet("wc-name",v);maybePost()};
+    note.innerHTML=`${LB.nameErr?"That name can’t be used. Letters, numbers, spaces, dots, dashes and underscores only. ":""}Pick a name to post your score.<form id="nameForm"><input id="nameIn" maxlength="16" placeholder="Your name" autocomplete="nickname" aria-label="Your name"><button class="pb" type="submit">Post</button></form>`;
+    $("nameForm").onsubmit=e=>{e.preventDefault();const v=$("nameIn").value.replace(/[^\p{L}\p{N} _.\-]/gu,"").trim().slice(0,16);if(!v){toast("Enter a name");return}lsSet("wc-name",v);LB.nameErr=false;welcome();maybePost()};
   }
   else if(LB.postErr)note.textContent="Your score couldn’t be posted. It will try again next time you open the game.";
   else note.textContent="Posting your score…";
