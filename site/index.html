@@ -543,7 +543,7 @@ $("hint").onclick=()=>{setTimeout(focusInput,0);
 
 /* ---------- leaderboard ---------- */
 /* Self-hosting: paste your Supabase project URL and anon public key here. */
-const CONFIG={supabaseUrl:"",supabaseKey:""};
+const CONFIG={supabaseUrl:"https://qophrjzzwexqtfrtlhmd.supabase.co",supabaseKey:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFvcGhyanp6d2V4cXRmcnRsaG1kIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQ5NDU4ODksImV4cCI6MjExMDUyMTg4OX0.pdVyB1WblNZQYC_KbpwLucMiKcyyFtdiEsWgOO3BETA"};
 
 const topLevel=()=>{try{return window.top===window}catch(e){return false}};
 const shareUrl=()=>topLevel()&&/^https?:/.test(location.protocol)?location.origin+location.pathname:"";
